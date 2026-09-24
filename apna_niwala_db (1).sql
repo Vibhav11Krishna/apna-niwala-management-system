@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Sep 22, 2026 at 05:13 PM
+-- Generation Time: Sep 24, 2026 at 07:46 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -32,17 +32,42 @@ CREATE TABLE `clients` (
   `name` varchar(100) NOT NULL,
   `address` text NOT NULL,
   `phone_no` varchar(15) NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `delivery_boy_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- --------------------------------------------------------
+
 --
--- Dumping data for table `clients`
+-- Table structure for table `delivery_persons`
 --
 
-INSERT INTO `clients` (`client_id`, `name`, `address`, `phone_no`, `created_at`) VALUES
-(1, 'pulkit krishna', 'Flat no. 403 rps more malti kunj near rp', '07209749002', '2026-09-21 21:34:17'),
-(2, 'Jayant krishna', 'Flat no. 403 rps more malti kunj near rps law college ram raj path', '88989898989', '2026-09-21 22:21:02'),
-(3, 'Rahul sharma', 'gola road', '987654321', '2026-09-22 14:19:36');
+CREATE TABLE `delivery_persons` (
+  `delivery_boy_id` int(11) NOT NULL,
+  `name` varchar(150) NOT NULL,
+  `phone_no` varchar(20) NOT NULL,
+  `address` text NOT NULL,
+  `salary_type` enum('Monthly','Weekly') DEFAULT 'Monthly',
+  `payout_amount` decimal(10,2) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `delivery_tasks`
+--
+
+CREATE TABLE `delivery_tasks` (
+  `task_id` int(11) NOT NULL,
+  `delivery_boy_id` int(11) NOT NULL,
+  `client_id` int(11) NOT NULL,
+  `meal_name` varchar(150) NOT NULL,
+  `delivery_charge` decimal(10,2) NOT NULL,
+  `status` enum('Pending','Received','Not Received') DEFAULT 'Pending',
+  `task_date` date NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -82,16 +107,6 @@ CREATE TABLE `payments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
--- Dumping data for table `payments`
---
-
-INSERT INTO `payments` (`payment_id`, `client_id`, `meal_name`, `diet_type`, `meal_date`, `due_date`, `meal_amount`, `amount_received`, `total_due`, `payment_mode`, `created_at`, `remarks`) VALUES
-(1, 1, 'Monthly Veg Plan (26 Meals)', 'Veg', '2026-09-21', '2026-09-28', 2899.00, 2899.00, 0.00, 'Cash', '2026-09-21 21:34:17', NULL),
-(2, 1, 'Monthly Non-Veg Plan (26 Meals)', 'Non-Veg', '2026-09-22', '2026-09-29', 3399.00, 3399.00, 0.00, 'Cash', '2026-09-21 22:20:42', ''),
-(3, 2, 'Mini Meal (2 Roti + Rice + Dal/Sabzi)', 'Veg', '2026-09-22', '2026-09-29', 79.00, 79.00, 0.00, 'Cash', '2026-09-21 22:21:02', ''),
-(4, 3, 'Monthly Veg Plan (26 Meals)', 'Veg', '2026-09-03', '2026-09-30', 2899.00, 1500.00, 1399.00, 'Cash', '2026-09-22 14:19:36', 'less spicy');
-
---
 -- Indexes for dumped tables
 --
 
@@ -101,6 +116,20 @@ INSERT INTO `payments` (`payment_id`, `client_id`, `meal_name`, `diet_type`, `me
 ALTER TABLE `clients`
   ADD PRIMARY KEY (`client_id`),
   ADD UNIQUE KEY `phone_no` (`phone_no`);
+
+--
+-- Indexes for table `delivery_persons`
+--
+ALTER TABLE `delivery_persons`
+  ADD PRIMARY KEY (`delivery_boy_id`);
+
+--
+-- Indexes for table `delivery_tasks`
+--
+ALTER TABLE `delivery_tasks`
+  ADD PRIMARY KEY (`task_id`),
+  ADD KEY `delivery_boy_id` (`delivery_boy_id`),
+  ADD KEY `client_id` (`client_id`);
 
 --
 -- Indexes for table `expenses`
@@ -123,7 +152,19 @@ ALTER TABLE `payments`
 -- AUTO_INCREMENT for table `clients`
 --
 ALTER TABLE `clients`
-  MODIFY `client_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `client_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `delivery_persons`
+--
+ALTER TABLE `delivery_persons`
+  MODIFY `delivery_boy_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `delivery_tasks`
+--
+ALTER TABLE `delivery_tasks`
+  MODIFY `task_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `expenses`
@@ -135,11 +176,18 @@ ALTER TABLE `expenses`
 -- AUTO_INCREMENT for table `payments`
 --
 ALTER TABLE `payments`
-  MODIFY `payment_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `payment_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- Constraints for dumped tables
 --
+
+--
+-- Constraints for table `delivery_tasks`
+--
+ALTER TABLE `delivery_tasks`
+  ADD CONSTRAINT `delivery_tasks_ibfk_1` FOREIGN KEY (`delivery_boy_id`) REFERENCES `delivery_persons` (`delivery_boy_id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `delivery_tasks_ibfk_2` FOREIGN KEY (`client_id`) REFERENCES `clients` (`client_id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `payments`

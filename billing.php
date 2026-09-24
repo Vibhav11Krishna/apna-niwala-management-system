@@ -78,22 +78,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         const mealDatabase = {
             "Veg": [
-                { name: "Mini Meal (2 Roti + Rice + Dal/Sabzi)", price: 79 },
-                { name: "Regular Meal (4 Roti + Rice + 2 Dal/Sabzi)", price: 99 },
-                { name: "Hunger Meal (5-6 Roti + Extra Rice + Sabzi)", price: 119 },
-                { name: "Rajma Chawal Special", price: 109 },
-                { name: "Kadhi Chawal Special", price: 109 },
+                { name: "Mini Meal (2 Roti + Dal + sabzi + rice + salad +achaar)", price: 79 },
+                { name: "Regular Meal (4 Roti + Rice +  Dal +Sabzi)", price: 99 },
+                { name: "Hunger Meal (5-6 Roti + Extra Rice/Dal/Sabzi)", price: 119 },
+                { name: "Rajma Chawal ", price: 109 },
+                { name: "Kadhi Chawal ", price: 109 },
                 { name: "Mix Veg Meal", price: 109 },
                 { name: "Aloo Paneer Meal", price: 119 },
                 { name: "Sunday Veg Special", price: 109 },
                 { name: "Mushroom Masala Meal", price: 129 },
                 { name: "Mushroom Paneer Meal", price: 139 },
-                { name: "Monthly Veg Plan (26 Meals)", price: 2899 }
+                { name: "Monthly Veg Plan", price: 2599 }
             ],
             "Non-Veg": [
                 { name: "Egg Meal (Sunday Special)", price: 99 },
                 { name: "Chicken Meal (Sunday Special)", price: 149 },
-                { name: "Monthly Non-Veg Plan (26 Meals)", price: 3399 }
+                { name: "Monthly Non-Veg Plan ", price: 2899 }
             ]
         };
 
