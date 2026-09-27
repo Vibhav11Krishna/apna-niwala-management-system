@@ -6,8 +6,10 @@ $user = 'root';$pass = '';
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
-    // Optional: Auto-add 'remarks' column to payments table if it doesn't exist yet
+    // Auto-add columns if they don't exist yet
     $pdo->exec("ALTER TABLE payments ADD COLUMN IF NOT EXISTS remarks TEXT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE payments ADD COLUMN IF NOT EXISTS quantity INT DEFAULT 1");
+    $pdo->exec("ALTER TABLE payments ADD COLUMN IF NOT EXISTS delivery_charge DECIMAL(10,2) DEFAULT 0.00");
 } catch (\PDOException $e) {
     die("Database Connection Failed: " . $e->getMessage());
 }
@@ -22,7 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($client_selection === 'existing') {
         $client_id = intval($_POST['existing_client_id']);
         
-        // Fetch existing client details to make sure they exist
         $stmt =$pdo->prepare("SELECT * FROM clients WHERE client_id = ?");
         $stmt->execute([$client_id]);
         $client =$stmt->fetch();
@@ -31,12 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die("Selected client not found.");
         }
     } else {
-        // New customer info
         $client_name  = trim($_POST['client_name']);
         $address      = trim($_POST['address']);
         $phone_no     = trim($_POST['phone_no']);
 
-        // Check if phone number already exists to avoid duplicates
         $stmt =$pdo->prepare("SELECT client_id FROM clients WHERE phone_no = ?");
         $stmt->execute([$phone_no]);
         $client =$stmt->fetch();
@@ -50,21 +49,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    $diet_type    =$_POST['diet_type'];
-    $meal_name    =$_POST['meal_name'];
-    $meal_date    =$_POST['meal_date'];
-    $due_date     =$_POST['due_date'];
-    $meal_amount  = floatval($_POST['meal_amount']);
-    $amount_rec   = floatval($_POST['amount_received']);
-    $total_due    = floatval($_POST['total_due']);
-    $payment_mode =$_POST['payment_mode'];
-    $remarks      = trim($_POST['remarks'] ?? '');
+    $diet_type      =$_POST['diet_type'];
+    $meal_name      =$_POST['meal_name'];
+    $meal_date      =$_POST['meal_date'];
+    $due_date       =$_POST['due_date'];
+    $quantity       = intval($_POST['quantity']);
+    $delivery_charge= floatval($_POST['delivery_charge']);
+    $meal_amount    = floatval($_POST['meal_amount']); // Total subtotal (price * qty + delivery)
+    $amount_rec     = floatval($_POST['amount_received']);
+    $total_due      = floatval($_POST['total_due']);
+    $payment_mode   =$_POST['payment_mode'];
+    $remarks        = trim($_POST['remarks'] ?? '');
 
     // Insert Transaction Record into payments
-    $stmt =$pdo->prepare("INSERT INTO payments (client_id, meal_name, diet_type, meal_date, due_date, meal_amount, amount_received, total_due, payment_mode, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$client_id,$meal_name, $diet_type,$meal_date, $due_date,$meal_amount, $amount_rec,$total_due, $payment_mode,$remarks]);
+    $stmt =$pdo->prepare("INSERT INTO payments (client_id, meal_name, diet_type, meal_date, due_date, quantity, delivery_charge, meal_amount, amount_received, total_due, payment_mode, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$client_id,$meal_name, $diet_type,$meal_date, $due_date,$quantity, $delivery_charge,$meal_amount, $amount_rec,$total_due, $payment_mode,$remarks]);
 
-    echo "<script>alert('Order Billed & Remarks Saved Successfully!'); window.location.href='billing.php';</script>";
+    echo "<script>alert('Order Billed & Saved Successfully!'); window.location.href='billing.php';</script>";
     exit;
 }
 ?>
@@ -78,26 +79,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         const mealDatabase = {
             "Veg": [
-                { name: "Mini Meal (2 Roti + Dal + sabzi + rice + salad +achaar)", price: 79 },
-                { name: "Regular Meal (4 Roti + Rice +  Dal +Sabzi)", price: 99 },
-                { name: "Hunger Meal (5-6 Roti + Extra Rice/Dal/Sabzi)", price: 119 },
-                { name: "Rajma Chawal ", price: 109 },
-                { name: "Kadhi Chawal ", price: 109 },
+                { name: "Mini Meal", price: 79 },
+                { name: "Regular Meal", price: 99 },
+                { name: "Hunger Meal", price: 119 },
+                { name: "Rajma Chawal", price: 109 },
+                { name: "Kadhi Chawal", price: 109 },
                 { name: "Mix Veg Meal", price: 109 },
                 { name: "Aloo Paneer Meal", price: 119 },
+                { name: "Baingan Bharta Meal", price: 109 },
+                { name: "Palak Paneer Meal", price: 119 },
+                { name: "Idli Sambhar", price: 99 },
+                { name: "Sattu Paratha Meal", price: 109 },
+                { name: "Khichdi Chokha Meal", price: 109 },
                 { name: "Sunday Veg Special", price: 109 },
                 { name: "Mushroom Masala Meal", price: 129 },
                 { name: "Mushroom Paneer Meal", price: 139 },
-                { name: "Monthly Veg Plan", price: 2599 }
+                { name: "Monthly Veg Plan", price: 2599 },
+                { name: "Monthly Veg Plan ", price: 1850 },
             ],
             "Non-Veg": [
-                { name: "Egg Meal (Sunday Special)", price: 99 },
-                { name: "Chicken Meal (Sunday Special)", price: 149 },
-                { name: "Monthly Non-Veg Plan ", price: 2899 }
+                { name: "Egg Meal ", price: 99 },
+                { name: "Chicken Meal ", price: 149 },
+                { name: "Monthly Non-Veg Plan", price: 2899 }
             ]
         };
 
-        // Pass PHP existing clients array to JavaScript safely
         const existingClientsData = <?php echo json_encode($existing_clients); ?>;
 
         function toggleClientMode() {
@@ -108,7 +114,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (mode === 'existing') {
                 existingSection.classList.remove('hidden');
                 newSection.classList.add('hidden');
-                // Remove required tags from new inputs so form submits properly
                 document.getElementById('inputClientName').removeAttribute('required');
                 document.getElementById('inputPhoneNo').removeAttribute('required');
                 document.getElementById('inputAddress').removeAttribute('required');
@@ -155,28 +160,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         function calculateTotals() {
             const mealSelect = document.getElementById('mealSelect');
             const selectedOption = mealSelect.options[mealSelect.selectedIndex];
-            const price = selectedOption ? parseFloat(selectedOption.getAttribute('data-price')) : 0;
+            const basePrice = selectedOption ? parseFloat(selectedOption.getAttribute('data-price')) : 0;
             
-            document.getElementById('mealAmount').value = price.toFixed(2);
-            document.getElementById('displayMealAmount').innerText = '₹' + price.toFixed(2);
+            const quantity = parseInt(document.getElementById('quantity').value) || 1;
+            const deliveryCharge = parseFloat(document.getElementById('deliveryCharge').value) || 0;
+
+            const totalMealPrice = (basePrice * quantity) + deliveryCharge;
+
+            document.getElementById('mealAmount').value = totalMealPrice.toFixed(2);
+            document.getElementById('displayMealAmount').innerText = '₹' + totalMealPrice.toFixed(2);
 
             const received = parseFloat(document.getElementById('amountReceived').value) || 0;
-            const dues = price - received;
+            const dues = totalMealPrice - received;
 
             document.getElementById('totalDue').value = dues >= 0 ? dues.toFixed(2) : '0.00';
             document.getElementById('displayTotalDue').innerText = '₹' + (dues >= 0 ? dues.toFixed(2) : '0.00');
         }
 
         function setQuickPayment(type) {
-            const mealSelect = document.getElementById('mealSelect');
-            const selectedOption = mealSelect.options[mealSelect.selectedIndex];
-            const price = selectedOption ? parseFloat(selectedOption.getAttribute('data-price')) : 0;
-            
+            const totalMealPrice = parseFloat(document.getElementById('mealAmount').value) || 0;
             const amountReceivedInput = document.getElementById('amountReceived');
             const paymentModeSelect = document.querySelector('select[name="payment_mode"]');
 
             if (type === 'full') {
-                amountReceivedInput.value = price.toFixed(2);
+                amountReceivedInput.value = totalMealPrice.toFixed(2);
                 paymentModeSelect.value = 'Cash';
             } else if (type === 'credit') {
                 amountReceivedInput.value = '0.00';
@@ -200,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mb-6 flex justify-between items-end">
                     <div>
                         <h1 class="text-3xl font-extrabold text-stone-900 tracking-tight">New Meal Billing</h1>
-                        <p class="text-stone-500 text-sm mt-1">Select existing repeat clients or add new customers, choose meal plans, and track dues.</p>
+                        <p class="text-stone-500 text-sm mt-1">Select existing repeat clients or add new customers, choose meal plans, quantities, and track dues.</p>
                     </div>
                     <a href="ledger.php" class="text-xs font-bold bg-white border border-stone-200 text-stone-700 px-4 py-2 rounded-xl shadow-sm hover:bg-stone-50 transition">View Ledger & Dues &rarr;</a>
                 </div>
@@ -210,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <!-- Left 2 Columns: Inputs -->
                     <div class="lg:col-span-2 space-y-6">
                         
-                        <!-- Card 1: Customer Selection / Information -->
+                        <!-- Card 1: Customer Information -->
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-200/80 space-y-4">
                             <div class="flex justify-between items-center">
                                 <h2 class="text-sm font-bold uppercase tracking-wider text-stone-400 flex items-center gap-2">
@@ -224,7 +231,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                             </div>
 
-                            <!-- Existing Client Dropdown Section -->
                             <div id="existingClientSection" class="space-y-2">
                                 <label class="block text-xs font-bold text-stone-600 mb-1">Select Customer from Database</label>
                                 <select id="existingClientSelect" name="existing_client_id" onchange="fillExistingClientDetails()" class="w-full px-3.5 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-sm font-semibold">
@@ -238,7 +244,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                             </div>
 
-                            <!-- New Client Input Section -->
                             <div id="newClientSection" class="hidden space-y-4">
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
@@ -281,10 +286,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                             </div>
 
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs font-bold text-stone-600 mb-1">Select Meal / Plan Package</label>
+                                    <select id="mealSelect" name="meal_name" onchange="calculateTotals()" class="w-full px-3.5 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-sm font-semibold">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-stone-600 mb-1">Quantity</label>
+                                    <input type="number" min="1" id="quantity" name="quantity" value="1" oninput="calculateTotals()" required class="w-full px-3.5 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-sm font-semibold">
+                                </div>
+                            </div>
+
                             <div>
-                                <label class="block text-xs font-bold text-stone-600 mb-1">Select Meal / Plan Package</label>
-                                <select id="mealSelect" name="meal_name" onchange="calculateTotals()" class="w-full px-3.5 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-sm font-semibold">
-                                </select>
+                                <label class="block text-xs font-bold text-stone-600 mb-1">Delivery Charge (₹)</label>
+                                <input type="number" step="0.01" min="0" id="deliveryCharge" name="delivery_charge" value="0.00" oninput="calculateTotals()" class="w-full px-3.5 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-sm font-semibold">
                             </div>
 
                             <div>
@@ -316,7 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             <div class="space-y-3">
                                 <div class="flex justify-between items-center text-sm">
-                                    <span class="text-stone-500 font-medium">Total Meal Price:</span>
+                                    <span class="text-stone-500 font-medium">Grand Total:</span>
                                     <span id="displayMealAmount" class="font-extrabold text-stone-900 text-base">₹0.00</span>
                                 </div>
 

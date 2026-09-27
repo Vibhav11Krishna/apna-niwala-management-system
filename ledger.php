@@ -9,8 +9,10 @@ try {
     $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
-    // Ensure remarks column exists
+    // Ensure remarks, quantity, and delivery_charge columns exist
     $pdo->exec("ALTER TABLE payments ADD COLUMN IF NOT EXISTS remarks TEXT DEFAULT NULL");
+    $pdo->exec("ALTER TABLE payments ADD COLUMN IF NOT EXISTS quantity INT DEFAULT 1");
+    $pdo->exec("ALTER TABLE payments ADD COLUMN IF NOT EXISTS delivery_charge DECIMAL(10,2) DEFAULT 0.00");
 } catch (\PDOException $e) {
     die("Database Connection Failed: " . $e->getMessage());
 }
@@ -37,16 +39,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo "<script>alert('Payment & Remarks Updated Successfully!'); window.location.href='ledger.php?client_id=" . intval($_POST['client_id']) . "';</script>";
         }
     } elseif (isset($_POST['edit_payment_id'])) {
-        // Edit entire transaction record (Complete edit option)
-        $payment_id   = $_POST['edit_payment_id'];
-        $meal_amount  = floatval($_POST['meal_amount']);
-        $amt_received = floatval($_POST['amount_received']);
-        $total_due    = max(0, $meal_amount - $amt_received);
-        $payment_mode = $_POST['payment_mode'];
-        $remarks      = $_POST['remarks'];
+        // Edit entire transaction record including quantity & delivery charge
+        $payment_id      = $_POST['edit_payment_id'];
+        $quantity        = intval($_POST['quantity']);
+        $delivery_charge = floatval($_POST['delivery_charge']);
+        $meal_amount     = floatval($_POST['meal_amount']); // Total subtotal (should include base price * qty + delivery)
+        $amt_received    = floatval($_POST['amount_received']);
+        $total_due       = max(0, $meal_amount - $amt_received);
+        $payment_mode    = $_POST['payment_mode'];
+        $remarks         = $_POST['remarks'];
 
-        $update_stmt = $pdo->prepare("UPDATE payments SET meal_amount = ?, amount_received = ?, total_due = ?, payment_mode = ?, remarks = ? WHERE payment_id = ?");
-        $update_stmt->execute([$meal_amount, $amt_received, $total_due, $payment_mode, $remarks, $payment_id]);
+        $update_stmt = $pdo->prepare("UPDATE payments SET quantity = ?, delivery_charge = ?, meal_amount = ?, amount_received = ?, total_due = ?, payment_mode = ?, remarks = ? WHERE payment_id = ?");
+        $update_stmt->execute([$quantity, $delivery_charge, $meal_amount, $amt_received, $total_due, $payment_mode, $remarks, $payment_id]);
 
         echo "<script>alert('Transaction Updated Successfully!'); window.location.href='ledger.php?client_id=" . intval($_POST['client_id']) . "';</script>";
     }
@@ -114,19 +118,18 @@ if ($selected_client_id) {
         
         function markAsComplete(id, amount) {
             document.getElementById('received-' + id).value = amount;
-            document.getElementById('due-input-' + id).value = 0;
         }
     </script>
 </head>
 <body class="bg-amber-50/60 font-sans text-stone-800">
     <div class="flex h-screen overflow-hidden">
-        <?php include 'sidebar.php'; ?>
+        <?php if(file_exists('sidebar.php')) include 'sidebar.php'; ?>
 
         <div class="flex-1 p-8 overflow-y-auto">
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h1 class="text-3xl font-extrabold text-stone-900 tracking-tight">Client Ledger & Dues Tracker</h1>
-                    <p class="text-stone-500 text-sm mt-1">Manage client records, inspect meal timelines, update remarks, and settle balances.</p>
+                    <p class="text-stone-500 text-sm mt-1">Manage client records, inspect meal timelines, update quantities, delivery charges, remarks, and settle balances.</p>
                 </div>
                 
                 <!-- Search Box -->
@@ -187,6 +190,7 @@ if ($selected_client_id) {
                                                 <div class="flex items-center gap-2">
                                                     <span><?= htmlspecialchars($tx['meal_name']) ?></span>
                                                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-full <?= $tx['diet_type'] == 'Veg' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800' ?>"><?= $tx['diet_type'] ?></span>
+                                                    <span class="text-xs bg-stone-200 text-stone-700 px-2 py-0.5 rounded-md">Qty: <?= $tx['quantity'] ?? 1 ?></span>
                                                 </div>
                                                 <span class="text-stone-900">₹<?= number_format($tx['meal_amount'], 2) ?></span>
                                             </div>
@@ -194,8 +198,12 @@ if ($selected_client_id) {
                                             <div class="grid grid-cols-2 md:grid-cols-4 text-xs text-stone-600 gap-2 mt-2 pt-2 border-t border-stone-200/50">
                                                 <div>🗓️ Confirmed: <b class="text-stone-800"><?= $tx['meal_date'] ?></b></div>
                                                 <div>⏳ Due Date: <b class="text-amber-700"><?= $tx['due_date'] ?></b></div>
+                                                <div>🚚 Delivery: <b class="text-stone-800">₹<?= number_format($tx['delivery_charge'] ?? 0, 2) ?></b></div>
                                                 <div>💳 Mode: <b class="text-stone-800"><?= $tx['payment_mode'] ?></b></div>
-                                                <div>Paid: <b class="text-emerald-700">₹<?= number_format($tx['amount_received'], 2) ?></b></div>
+                                            </div>
+
+                                            <div class="text-xs text-stone-600 mt-1">
+                                                Paid Amount: <b class="text-emerald-700">₹<?= number_format($tx['amount_received'], 2) ?></b>
                                             </div>
 
                                             <?php if(!empty($tx['remarks'])): ?>
@@ -235,18 +243,26 @@ if ($selected_client_id) {
                                                 
                                                 <div class="text-xs font-extrabold text-stone-700 uppercase">Editing Transaction #<?= $tx['payment_id'] ?></div>
                                                 
-                                                <div class="grid grid-cols-2 gap-2">
+                                                <div class="grid grid-cols-3 gap-2">
                                                     <div>
-                                                        <label class="block text-[10px] uppercase font-bold text-stone-500 mb-1">Meal Total Price (₹)</label>
-                                                        <input type="number" step="0.01" name="meal_amount" value="<?= $tx['meal_amount'] ?>" class="w-full px-2.5 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-bold">
+                                                        <label class="block text-[10px] uppercase font-bold text-stone-500 mb-1">Quantity</label>
+                                                        <input type="number" min="1" name="quantity" value="<?= $tx['quantity'] ?? 1 ?>" class="w-full px-2.5 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-bold">
                                                     </div>
                                                     <div>
-                                                        <label class="block text-[10px] uppercase font-bold text-stone-500 mb-1">Amount Received (₹)</label>
-                                                        <input type="number" step="0.01" id="received-<?= $tx['payment_id'] ?>" name="amount_received" value="<?= $tx['amount_received'] ?>" class="w-full px-2.5 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-bold text-emerald-700">
+                                                        <label class="block text-[10px] uppercase font-bold text-stone-500 mb-1">Delivery Charge (₹)</label>
+                                                        <input type="number" step="0.01" min="0" name="delivery_charge" value="<?= $tx['delivery_charge'] ?? 0 ?>" class="w-full px-2.5 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-bold">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] uppercase font-bold text-stone-500 mb-1">Total Price (₹)</label>
+                                                        <input type="number" step="0.01" name="meal_amount" value="<?= $tx['meal_amount'] ?>" class="w-full px-2.5 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-bold">
                                                     </div>
                                                 </div>
 
                                                 <div class="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label class="block text-[10px] uppercase font-bold text-stone-500 mb-1">Amount Received (₹)</label>
+                                                        <input type="number" step="0.01" id="received-<?= $tx['payment_id'] ?>" name="amount_received" value="<?= $tx['amount_received'] ?>" class="w-full px-2.5 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-bold text-emerald-700">
+                                                    </div>
                                                     <div>
                                                         <label class="block text-[10px] uppercase font-bold text-stone-500 mb-1">Payment Mode</label>
                                                         <select name="payment_mode" class="w-full px-2.5 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-semibold">
@@ -255,9 +271,6 @@ if ($selected_client_id) {
                                                             <option value="Bank Transfer" <?= $tx['payment_mode']=='Bank Transfer'?'selected':'' ?>>Bank Transfer</option>
                                                             <option value="Credit" <?= $tx['payment_mode']=='Credit'?'selected':'' ?>>Credit</option>
                                                         </select>
-                                                    </div>
-                                                    <div class="flex items-end">
-                                                        <button type="button" onclick="markAsComplete(<?= $tx['payment_id'] ?>, <?= $tx['meal_amount'] ?>)" class="w-full bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs py-1.5 px-2 rounded-xl font-bold transition">Mark Fully Paid</button>
                                                     </div>
                                                 </div>
 
