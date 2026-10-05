@@ -17,7 +17,7 @@ try {
     die("Database Connection Failed: " . $e->getMessage());
 }
 
-// Handle Dues Settlement or Full Completion / Remark Update
+// Handle Dues Settlement, Full Completion / Remark Update, or Client Deletion
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['settle_payment_id'])) {
         $payment_id   = $_POST['settle_payment_id'];
@@ -40,10 +40,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif (isset($_POST['edit_payment_id'])) {
         // Edit entire transaction record including quantity & delivery charge
-        $payment_id      = $_POST['edit_payment_id'];
-        $quantity        = intval($_POST['quantity']);
+        $payment_id       = $_POST['edit_payment_id'];
+        $quantity         = intval($_POST['quantity']);
         $delivery_charge = floatval($_POST['delivery_charge']);
-        $meal_amount     = floatval($_POST['meal_amount']); // Total subtotal (should include base price * qty + delivery)
+        $meal_amount     = floatval($_POST['meal_amount']); 
         $amt_received    = floatval($_POST['amount_received']);
         $total_due       = max(0, $meal_amount - $amt_received);
         $payment_mode    = $_POST['payment_mode'];
@@ -53,6 +53,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $update_stmt->execute([$quantity, $delivery_charge, $meal_amount, $amt_received, $total_due, $payment_mode, $remarks, $payment_id]);
 
         echo "<script>alert('Transaction Updated Successfully!'); window.location.href='ledger.php?client_id=" . intval($_POST['client_id']) . "';</script>";
+    } elseif (isset($_POST['delete_client_id'])) {
+        // Delete client and their associated payments (or handle via foreign key cascades)
+        $client_id_to_delete = intval($_POST['delete_client_id']);
+
+        // Delete payments first if foreign key constraints require it
+        $del_payments = $pdo->prepare("DELETE FROM payments WHERE client_id = ?");
+        $del_payments->execute([$client_id_to_delete]);
+
+        // Delete the client
+        $del_client = $pdo->prepare("DELETE FROM clients WHERE client_id = ?");
+        $del_client->execute([$client_id_to_delete]);
+
+        echo "<script>alert('Client Deleted Successfully!'); window.location.href='ledger.php';</script>";
+        exit;
     }
 }
 
@@ -173,7 +187,16 @@ if ($selected_client_id) {
                                 <h2 class="text-xl font-extrabold text-stone-900"><?= htmlspecialchars($client_info['name']) ?></h2>
                                 <p class="text-xs text-stone-500 mt-1">📞 <?= htmlspecialchars($client_info['phone_no']) ?> &nbsp;|&nbsp; 🏠 <?= htmlspecialchars($client_info['address']) ?></p>
                             </div>
-                            <span class="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold">ID #<?= $client_info['client_id'] ?></span>
+                            <div class="flex items-center gap-3">
+                                <span class="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold">ID #<?= $client_info['client_id'] ?></span>
+                                <!-- Delete Client Button -->
+                                <form method="POST" onsubmit="return confirm('Are you sure you want to delete this client and all their transaction history? This cannot be undone.');">
+                                    <input type="hidden" name="delete_client_id" value="<?= $client_info['client_id'] ?>">
+                                    <button type="submit" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1">
+                                        🗑️ Delete Client
+                                    </button>
+                                </form>
+                            </div>
                         </div>
 
                         <h3 class="text-xs font-bold uppercase tracking-wider text-stone-500 mb-3">Meal History & Dues Records</h3>

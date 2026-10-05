@@ -80,8 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const mealDatabase = {
             "Veg": [
                 { name: "Mini Meal", price: 79 },
+                { name: "Mini Meal", price: 89 },
                 { name: "Regular Meal", price: 99 },
+                { name: "Regular Meal", price: 109 },
                 { name: "Hunger Meal", price: 119 },
+                { name: "Hunger Meal", price: 139 },
                 { name: "Rajma Chawal", price: 109 },
                 { name: "Kadhi Chawal", price: 109 },
                 { name: "Mix Veg Meal", price: 109 },
@@ -96,11 +99,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 { name: "Mushroom Paneer Meal", price: 139 },
                 { name: "Monthly Veg Plan", price: 2599 },
                 { name: "Monthly Veg Plan ", price: 1850 },
+                { name: "Monthly Veg Plan ", price: 3299 },
             ],
             "Non-Veg": [
                 { name: "Egg Meal ", price: 99 },
                 { name: "Chicken Meal ", price: 149 },
-                { name: "Monthly Non-Veg Plan", price: 2899 }
+                { name: "Monthly Non-Veg Plan", price: 2899 },
+                { name: "Monthly Non-Veg Plan", price: 3599 }
             ]
         };
 
